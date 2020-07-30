@@ -236,9 +236,13 @@ bool hashmapIsEmpty(const HashMap *map);
  * Returns a string representing the value associated with the given key,
  * using the hash map's `printVal` function pointer to create the string.
  *
+ * If either the hash map or key is NULL, or if the key was not found in
+ * the hash map, then a 1-character string containing only the null terminator
+ * is returned instead.
+ *
  * The string must be freed by the calling function after use.
  */
-char *hashmapValueToString(const HashMap *map, void *value);
+char *hashmapValueToString(const HashMap *map, void *key);
 
 
 /*
@@ -246,7 +250,7 @@ char *hashmapValueToString(const HashMap *map, void *value);
  * and then freeing the string that was created after printing it.
  * A newline is printed after the string is done printing.
  */
-void hashmapPrintValue(const HashMap *map, void *value);
+void hashmapPrintValue(const HashMap *map, void *key);
 
 
 /*

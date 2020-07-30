@@ -357,19 +357,33 @@ long hashmapLength(const HashMap *map) {
 
 
 bool hashmapIsEmpty(const HashMap *map) {
-	printf("hashmapIsEmpty is unimplemented\n");
-	return false;
+	if (map == NULL) {
+		return false;
+	}
+
+	return map->length == 0;
 }
 
 
-char *hashmapValueToString(const HashMap *map, void *value) {
-	printf("hashmapValueToString is unimplemented\n");
-	return NULL;
+char *hashmapValueToString(const HashMap *map, void *key) {
+	char *toReturn;
+	void *value = hashmapGet(map, key);	// hashmapGet is safe to invoke even if map or key is NULL
+
+	if (map == NULL || hashmapIsEmpty(map) || value == NULL) {
+		toReturn = malloc(sizeof(char));
+		toReturn[0] = '\0';
+	} else {
+		toReturn = map->printValue(value);
+	}
+
+	return toReturn;
 }
 
 
-void hashmapPrintValue(const HashMap *map, void *value) {
-	printf("hashmapPrintValue is unimplemented\n");
+void hashmapPrintValue(const HashMap *map, void *key) {
+	char *toPrint = hashmapValueToString(map, key);
+	printf("%s\n", toPrint);
+	free(toPrint);
 }
 
 

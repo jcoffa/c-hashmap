@@ -1,5 +1,10 @@
 #include "HashMap.h"
 
+
+/****************
+ * INTERNAL USE *
+ ****************/
+
 // A special hash entry value indicating no data is present in a bucket
 static const HashEntry *const EMPTY_ENTRY = NULL;
 
@@ -15,6 +20,11 @@ static const HashEntry _DUMMY_ENTRY = {0, NULL, NULL};
  */
 static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
 
+
+
+/************************************
+ * STATIC FUNCTION BODY DEFINITIONS *
+ ************************************/
 
 static int64_t djb2x(void *key) {
 	char *str = (char *)key;
@@ -33,7 +43,7 @@ static int64_t djb2x(void *key) {
  *
  * For example, closestPow2(20) = 32 (32 is the smallest power of 2 that is >= 20)
  */
-static int closestPow2(long x) {
+static long closestPow2(long x) {
 	int toReturn = 1;
 
 	while (toReturn < x) {
@@ -54,50 +64,25 @@ static inline bool entryIsOpen(HashEntry *entry) {
 }
 
 
-HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteVal)(void *), char *(*printVal)(void *), \
-        void (*deleteKey)(void *), char *(*printKey)(void *)) {
-
-	return hashmapNewBuckets(DEFAULT_BUCKETS, hash, deleteVal, printVal, deleteKey, printKey);
-}
-
-
-HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
-        char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *)) {
-
-	if (deleteValue == NULL || printValue == NULL || deleteKey == NULL || printKey == NULL) {
+/*
+ * Allocates and returns a new array of hash map entries of the specified length.
+ * All buckets are initialized to empty.
+ *
+ * Returns NULL instead of any memory allocation fails or if numBuckets is negative.
+ */
+static HashEntry **_makeBuckets(long numBuckets) {
+	if (numBuckets < 0) {
 		return NULL;
 	}
 
-	HashMap *toReturn = malloc(sizeof(HashMap));
-
+	HashEntry **toReturn = malloc(sizeof(HashEntry) * numBuckets);
 	if (toReturn == NULL) {
 		return NULL;
 	}
 
-	toReturn->entries = malloc(sizeof(HashEntry) * closestPow2(num_buckets));
-	if (toReturn->entries == NULL) {
-		free(toReturn);
-		return NULL;
+	for (long i = 0; i < numBuckets; i++) {
+		toReturn[i] = (HashEntry *)EMPTY_ENTRY;
 	}
-
-	// Fill the array with empty values
-	for (long i = 0; i < num_buckets; i++) {
-		(toReturn->entries)[i] = (HashEntry *)EMPTY_ENTRY;
-	}
-
-	// If hash function was not given, then use the djb2x hash function for string (char *) data
-	if (hash == DEFAULT_HASH) {
-		toReturn->hash = djb2x;
-	} else {
-		toReturn->hash = hash;
-	}
-
-	toReturn->length = 0;
-	toReturn->num_buckets = num_buckets;
-	toReturn->deleteValue = deleteValue;
-	toReturn->printValue = printValue;
-	toReturn->deleteKey = deleteKey;
-	toReturn->printKey = printKey;
 
 	return toReturn;
 }
@@ -123,6 +108,168 @@ static HashEntry *hashentryNew(int64_t hash, void *key, void *value) {
 	toReturn->hash = hash;
 	toReturn->key = key;
 	toReturn->value = value;
+
+	return toReturn;
+}
+
+
+/*
+ * The hash map can't be NULL before calling this function.
+ *
+ * Returns true if the hash map's load factor has exceeded the allowable amount (i.e. LOAD_FACTOR)
+ * and needs to be resized.
+ *
+ * Returns false otherwise.
+ *
+ * There is a special case for particularly small hash maps which can only be created by
+ * using the `hashmapNewBuckets` function with very small amounts of buckets. Recall that
+ * there must be at least 1 empty space in the hash map or else the lookup will never terminate.
+ *
+ * For example, imagine that a hash map has exactly 2 buckets and only 1 bucket is filled.
+ * The load factor (of 0.5) is within the allowable amount (of 0.67) so the hash map will not be resized,
+ * but adding another element would completely fill the hash map. This case must also signal
+ * that a resize is necessary, or else future lookups will infinite loop.
+ *
+ * This special case where an insertion would compromise the integrity of hash map lookups
+ * is what the second condition represents.
+ */
+static inline bool hashmapNeedsResize(const HashMap *map) {
+	if (((double)(map->length) / (double)(map->num_buckets)) > LOAD_FACTOR) {
+		return true;
+	}
+	return map->length == map->num_buckets-1;
+}
+
+
+/*
+* Inserts the new hash entry into the hash entry array without attempting to resize it.
+*
+* Returns 1 if the new entry didn't overlap an existing entry and the length of the
+* hash map needs to be incremented by the caller.
+* Returns 0 otherwise.
+*/
+static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert) {
+   char entryWasNew = 1;
+   long i = labs(toInsert->hash) % (length);
+
+   // Find an empty spot in the hash map by linear probing
+   while (!entryIsOpen(entries[i])) {
+	   // TODO check if current entry has the same hash as what we're trying to insert.
+	   // If it does, then free the old value (don't have to free the entire entry) and replace it.
+
+	   /*
+	   ...
+	   entryWasNew = 0;
+	   break;
+	   */
+
+	   // Wrap the index around the end of the array if necessary
+	   i = (i+1) % (length);
+   }
+
+   entries[i] = toInsert;
+   return entryWasNew;
+}
+
+
+/*
+ * Resizes the hash map so that it holds four times as many buckets as it did previously.
+ * Once the hash map becomes sufficiently large (its number of buckets is at least HASHMAP_LARGE_SIZE)
+ * the hash map is only resized to hold twice as many buckets as it did previously.
+ *
+ * All its entries are reinserted into the buckets after resizing, potentially receiving
+ * a new position in the hash map thanks to the increase in open space and size.
+ *
+ * This is a pretty expensive operation that should performed as infrequently as possible.
+ * This cost is part of the reason why these hash maps are resized to be so massive.
+ *
+ * Returns false if the hash map is NULL, or if any memory allocation fails.
+ * Returns true otherwise, indicating a successful operation.
+ */
+static bool hashmapResize(HashMap *map) {
+	if (map == NULL) {
+		return false;
+	}
+
+	// First, allocate space for the new array
+
+	// Hash map grows by a factor of 4 if it's small, or a factor of 2 if its already quite big
+	long newNumBuckets = map->num_buckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
+	HashEntry **newEntries = _makeBuckets(newNumBuckets);
+	if (map->entries == NULL) {
+		// Memory allocation for expanded entries array failed; can't really do anything to save it
+		return false;
+	}
+
+	// Move all of the existing entries to the new array
+	long entriesCopied = 0;
+	HashEntry *entry;
+	for (long i = 0; entriesCopied < map->length && i < map->num_buckets; i++) {
+		entry = (map->entries)[i];
+		if (entryIsOpen(entry)) {
+			continue;
+		}
+
+		_hashmapInsert(newEntries, newNumBuckets, entry);
+		entriesCopied++;
+	}
+
+	// Memory has been allocated and data has been copied. It is now safe to delete the old
+	// array and update the hash map.
+	free(map->entries);
+	map->entries = newEntries;
+	map->num_buckets = newNumBuckets;
+
+	return true;
+}
+
+
+
+
+
+/**************************************
+ * "PUBLIC" FUNCTION BODY DEFINITIONS *
+ **************************************/
+
+HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteVal)(void *), char *(*printVal)(void *), \
+        void (*deleteKey)(void *), char *(*printKey)(void *)) {
+
+	return hashmapNewBuckets(DEFAULT_BUCKETS, hash, deleteVal, printVal, deleteKey, printKey);
+}
+
+
+HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
+        char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *)) {
+
+	if (deleteValue == NULL || printValue == NULL || deleteKey == NULL || printKey == NULL) {
+		return NULL;
+	}
+
+	HashMap *toReturn = malloc(sizeof(HashMap));
+
+	if (toReturn == NULL) {
+		return NULL;
+	}
+
+	toReturn->entries = _makeBuckets(closestPow2(num_buckets));
+	if (toReturn->entries == NULL) {
+		free(toReturn);
+		return NULL;
+	}
+
+	// If hash function was not given, then use the djb2x hash function for string (char *) data
+	if (hash == DEFAULT_HASH) {
+		toReturn->hash = djb2x;
+	} else {
+		toReturn->hash = hash;
+	}
+
+	toReturn->length = 0;
+	toReturn->num_buckets = num_buckets;
+	toReturn->deleteValue = deleteValue;
+	toReturn->printValue = printValue;
+	toReturn->deleteKey = deleteKey;
+	toReturn->printKey = printKey;
 
 	return toReturn;
 }
@@ -168,54 +315,6 @@ void hashmapFree(HashMap *map) {
 }
 
 
-/*
- * The hash map can't be NULL before calling this function.
- *
- * Returns true if the hash map's load factor has exceeded the allowable amount (i.e. LOAD_FACTOR)
- * and needs to be resized.
- *
- * Returns false otherwise.
- *
- * There is a special case for particularly small hash maps which can only be created by
- * using the `hashmapNewBuckets` function with very small amounts of buckets. Recall that
- * there must be at least 1 empty space in the hash map or else the lookup will never terminate.
- *
- * For example, imagine that a hash map has exactly 2 buckets and only 1 bucket is filled.
- * The load factor (of 0.5) is within the allowable amount (of 0.67) so the hash map will not be resized,
- * but adding another element would completely fill the hash map. This case must also signal
- * that a resize is necessary, or else future lookups will infinite loop.
- *
- * This special case where an insertion would compromise the integrity of hash map lookups
- * is what the second condition represents.
- */
-static inline bool hashmapNeedsResize(const HashMap *map) {
-	if (((double)(map->length) / (double)(map->num_buckets)) > LOAD_FACTOR) {
-		return true;
-	}
-	return map->length == map->num_buckets-1;
-}
-
-
-/*
- * Resizes the hash map so that it holds four times as many buckets as it did previously.
- * Once the hash map becomes sufficiently large (its number of buckets is at least HASHMAP_LARGE_SIZE)
- * the hash map is only resized to hold twice as many buckets as it did previously.
- *
- * All its entries are reinserted into the buckets after resizing, potentially receiving
- * a new position in the hash map thanks to the increase in open space and size.
- *
- * This is a pretty expensive operation that should performed as infrequently as possible.
- * This cost is part of the reason why these hash maps are resized to be so massive.
- *
- * Returns false if the hash map is NULL, or if any memory allocation fails.
- * Returns true otherwise, indicating a successful operation.
- */
-static bool hashmapResize(HashMap *map) {
-	printf("hashmapResize is unimplemented");
-	return false;
-}
-
-
 bool hashmapInsert(HashMap *map, void *key, void *value) {
 	if (map == NULL || key == NULL) {
 		return false;
@@ -237,20 +336,7 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	long i = labs(hashVal) % (map->num_buckets);
-
-	// Find an empty spot in the hash map by linear probing
-	while ((map->entries)[i] != EMPTY_ENTRY) {
-		// TODO check if current entry has the same hash as what we're trying to insert.
-		// If it does, then free the old value (don't have to free the entire entry) and replace it.
-		// Make sure to not increment the hash map's length.
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->num_buckets);	
-	}
-
-	(map->entries)[i] = toInsert;
-	(map->length)++;
+	map->length += _hashmapInsert(map->entries, map->num_buckets, toInsert);
 
 	return true;
 }

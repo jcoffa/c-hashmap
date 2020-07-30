@@ -1,5 +1,20 @@
 #include "HashMap.h"
 
+// A special hash entry value indicating no data is present in a bucket
+static const HashEntry *const EMPTY_ENTRY = NULL;
+
+
+// _DUMMY_ENTRY SHOULD NEVER BE USED DIRECTLY; it is only used to set the pointer constant DUMMY_ENTRY
+static const HashEntry _DUMMY_ENTRY = {0, NULL, NULL};
+
+/*
+ * A special hash entry value indicating that data used to be present in thsi bucket,
+ * but it has since been removed (by a call to `hashmapRemove` or `hashmapDeleteKey`).
+ * This is necessary due to how linear probing breaks when a hole is introduced in
+ * the middle of a sequence of filled buckets.
+ */
+static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
+
 
 static int64_t djb2x(void *key) {
 	char *str = (char *)key;
@@ -29,6 +44,16 @@ static int closestPow2(long x) {
 }
 
 
+/*
+ * Returns true if the given entry is either of the special hash entry values (EMPTY_ENTRY or DUMMY_ENTRY).
+ *
+ * Returns false otherwise, indicating that the entry contains legitimate data.
+ */
+static inline bool entryIsOpen(HashEntry *entry) {
+	return (entry == EMPTY_ENTRY || entry == DUMMY_ENTRY);
+}
+
+
 HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteVal)(void *), char *(*printVal)(void *), \
         void (*deleteKey)(void *), char *(*printKey)(void *)) {
 
@@ -49,11 +74,15 @@ HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*del
 		return NULL;
 	}
 
-	// Have to use calloc to set all memory to 0
-	toReturn->entries = calloc(closestPow2(num_buckets), sizeof(HashEntry));
+	toReturn->entries = malloc(sizeof(HashEntry) * closestPow2(num_buckets));
 	if (toReturn->entries == NULL) {
 		free(toReturn);
 		return NULL;
+	}
+
+	// Fill the array with empty values
+	for (long i = 0; i < num_buckets; i++) {
+		(toReturn->entries)[i] = (HashEntry *)EMPTY_ENTRY;
 	}
 
 	// If hash function was not given, then use the djb2x hash function for string (char *) data
@@ -114,12 +143,12 @@ void hashmapClear(HashMap *map) {
 	while (map->length > 0 && i < map->num_buckets) {
 		entry = (map->entries)[i];
 
-		if (entry != NULL) {
+		if (!entryIsOpen(entry)) {
 			map->deleteValue(entry->value);
 			map->deleteKey(entry->key);
 			free(entry);
 
-			(map->entries)[i] = NULL;
+			(map->entries)[i] = (HashEntry *)EMPTY_ENTRY;
 			(map->length)--;
 		}
 
@@ -204,13 +233,14 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 	int64_t hashVal = map->hash(key);
 	HashEntry *toInsert = hashentryNew(hashVal, key, value);
 	if (toInsert == NULL) {
+		// Memory allocation failure
 		return false;
 	}
 
 	long i = labs(hashVal) % (map->num_buckets);
 
 	// Find an empty spot in the hash map by linear probing
-	while ((map->entries)[i] != NULL) {
+	while ((map->entries)[i] != EMPTY_ENTRY) {
 		// TODO check if current entry has the same hash as what we're trying to insert.
 		// If it does, then free the old value (dont have to free the entire entry) and replace it.
 		// Make sure to not increment the hash map's length.
@@ -236,7 +266,7 @@ void *hashmapGet(const HashMap *map, void *key) {
 	long i = labs(hashVal) % (map->num_buckets);
 	HashEntry *cur = (map->entries)[i];
 
-	while (cur != NULL) {
+	while (cur != EMPTY_ENTRY) {
 		if (cur->hash == hashVal) {
 			toReturn = cur->value;
 			break;
@@ -252,14 +282,46 @@ void *hashmapGet(const HashMap *map, void *key) {
 
 
 void *hashmapRemove(HashMap *map, void *key) {
-	printf("hashmapRemove is unimplemented\n");
-	return NULL;
+	if (map == NULL || key == NULL) {
+		return NULL;
+	}
+
+	void *toReturn = NULL;
+	int64_t hashVal = map->hash(key);
+	long i = labs(hashVal) % (map->num_buckets);
+	HashEntry *cur = (map->entries)[i];
+
+	while (cur != EMPTY_ENTRY) {
+		if (cur->hash == hashVal) {
+			toReturn = cur->value;
+			map->deleteKey(cur->key);
+			free(cur);
+			(map->entries)[i] = (HashEntry *)DUMMY_ENTRY;
+			(map->length)--;
+			break;
+		}
+
+		// Wrap the index around the end of the array if necessary
+		i = (i+1) % (map->num_buckets);
+		cur = (map->entries)[i];
+	}
+
+	return toReturn;
 }
 
 
 bool hashmapDeleteKey(HashMap *map, void *key) {
-	printf("hashmapDeleteKey is unimplemented\n");
-	return false;
+	if (map == NULL) {
+		return false;
+	}
+
+	void *value = hashmapRemove(map, key);
+	if (value == NULL) {
+		return false;
+	}
+
+	map->deleteValue(value);
+	return true;
 }
 
 
@@ -272,8 +334,8 @@ bool hashmapContains(const HashMap *map, void *key) {
 	long i = labs(hashVal) % (map->num_buckets);
 	HashEntry *cur = (map->entries)[i];
 
-	while (cur != NULL) {
-		if (cur->hash == hashVal) {
+	while (cur != EMPTY_ENTRY) {
+		if (cur != DUMMY_ENTRY && cur->hash == hashVal) {
 			return true;
 		}
 
@@ -328,7 +390,7 @@ char *hashmapToString(const HashMap *map) {
 
 	for (long i = 0; i < map->num_buckets; i++) {
 		entry = (map->entries)[i];
-		if (entry == NULL) {
+		if (entryIsOpen(entry)) {
 			continue;
 		}
 
@@ -380,10 +442,15 @@ char *__hashmapToStringDEBUG(const HashMap *map) {
 
 	for (long i = 0; i < map->num_buckets; i++) {
 		entry = (map->entries)[i];
-		if (entry == NULL) {
-			toReturn = realloc(toReturn, length+7);
-			strcat(toReturn, "NULL, ");
-			length += 6;
+		if (entry == EMPTY_ENTRY) {
+			toReturn = realloc(toReturn, length+10);
+			strcat(toReturn, "<EMPTY>, ");
+			length += 9;
+			continue;
+		} else if (entry == DUMMY_ENTRY) {
+			toReturn = realloc(toReturn, length+10);
+			strcat(toReturn, "<DUMMY>, ");
+			length += 9;
 			continue;
 		}
 

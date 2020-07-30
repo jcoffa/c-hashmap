@@ -82,22 +82,23 @@ typedef struct hashMapEntry {
  *
  * This hash map uses the "open addressing" approach to collision handling, and uses a
  * naive "linear probing" method to handle collisions. This means that this hash map
- * implementation is decently dependant on having a good hash function to spread out
- * its elements. Here's a pretty incredible Stack Exchange post on how some popular
+ * implementation is somewhat dependant on having a good hash function to spread out
+ * its elements.
+ * Here's a pretty incredible Stack Exchange post on how some popular
  * hash functions perform with English words, numbers, and GUID's as their data:
  * 		https://softwareengineering.stackexchange.com/a/145633
  *
- * This implementation will resize and rehash its entries once its load factor exceeds 2/3;
+ * This implementation will resize and re-index its entries once its load factor exceeds 2/3;
  * quadrupling the size of the hash map each resize (until its number of buckets reaches
  * HASHMAP_LARGE_SIZE, at which point it is doubled each resize)
  */
 typedef struct hashMapHead {
 	HashEntry **entries;	// The key-value pairs stored in the hash map
-	long length;		// The number of entries currently in the hash map
-	long num_buckets;	// The maximum number of entries the hash map can hold.
-	                 	// For a new hash map, this field is equal to DEFAULT_BUCKETS.
+	long length;			// The number of entries currently in the hash map
+	long num_buckets;		// The maximum number of entries the hash map can hold.
+	                 		// For a new hash map, this field is equal to DEFAULT_BUCKETS.
 
-	int64_t (*hash)(void *);		// The hash function to turn a key into an 8-byte signed integer
+	int64_t (*hash)(void *);		// Hash function pointer to turn a key into an 8-byte signed integer
 	void (*deleteValue)(void *);	// Function pointer to free a value in the hash map
 	char *(*printValue)(void *);	// Function pointer to create a string from a value in the hash map
 	void (*deleteKey)(void *);		// Function pointer to free a key in the hash map
@@ -114,15 +115,15 @@ typedef struct hashMapHead {
  * Allocates memory to the struct, unless any of the function pointers except `hash` are NULL.
  * If the `hash` function pointer is NULL, the djb2 hashing algorithm for strings (char *) is used.
  * Passing the literal NULL into a function isn't very descriptive and looks odd, so callers are
- * encouraged to use the DEFAULT_HASH macro instead.
+ * encouraged to use the DEFAULT_HASH macro instead in order to be explicit about their intentions.
  *
  * If any other function pointers are NULL, then NULL is returned instead and no memory is allocated.
  * NULL is also returned if any memory allocation fails.
  *
  * The HashMap provides an interface to a generic collection of keys each mapped to a generic value.
  * The first function pointer is the hash function used to turn keys into 8-byte signed integer hashes
- * in typical hash map fashion. The four remaining function pointers allow the struct to print and delete
- * its keys and values.
+ * in typical hash map fashion. The four remaining function pointers allow the struct to delete
+ * its keys and values and convert them into a readable string format.
  * The (void *) arguments are to be casted into their proper data type (i.e. whatever
  * data type the hash map's keys and values will be) and do as follows:
  *
@@ -188,7 +189,7 @@ void *hashmapGet(const HashMap *map, void *key);
  * Returns and removes the value associated with the given key.
  * The key is also removed from the hash map.
  *
- * Returns NULL if the hashmap itself is NULL, or if the key is not present in the hash map.
+ * Returns NULL if the hash map itself is NULL, or if the key is not present in the hash map.
  */
 void *hashmapRemove(HashMap *map, void *key);
 
@@ -197,7 +198,7 @@ void *hashmapRemove(HashMap *map, void *key);
  * Removes the value associated with the given key and the key itself from the hash map.
  * Both the key and value are freed after removal.
  *
- * Returns false if the hashmap is NULL, or if the key is not present in the hash map.
+ * Returns false if the hash map is NULL, or if the key is not present in the hash map.
  *
  * Returns true otherwise, indicating a successful deletion.
  *

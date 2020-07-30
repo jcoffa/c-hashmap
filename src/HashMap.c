@@ -221,7 +221,7 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	// Resize the hashmap
+	// Resize the hash map
 	if (hashmapNeedsResize(map)) {
 		// hashmapResize returns false on an error
 		if (!hashmapResize(map)) {
@@ -242,7 +242,7 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 	// Find an empty spot in the hash map by linear probing
 	while ((map->entries)[i] != EMPTY_ENTRY) {
 		// TODO check if current entry has the same hash as what we're trying to insert.
-		// If it does, then free the old value (dont have to free the entire entry) and replace it.
+		// If it does, then free the old value (don't have to free the entire entry) and replace it.
 		// Make sure to not increment the hash map's length.
 
 		// Wrap the index around the end of the array if necessary

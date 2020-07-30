@@ -264,7 +264,24 @@ bool hashmapDeleteKey(HashMap *map, void *key) {
 
 
 bool hashmapContains(const HashMap *map, void *key) {
-	printf("hashmapContains is unimplemented\n");
+	if (map == NULL) {
+		return false;
+	}
+
+	int64_t hashVal = map->hash(key);
+	long i = labs(hashVal) % (map->num_buckets);
+	HashEntry *cur = (map->entries)[i];
+
+	while (cur != NULL) {
+		if (cur->hash == hashVal) {
+			return true;
+		}
+
+		// Wrap the index around the end of the array if necessary
+		i = (i+1) % (map->num_buckets);
+		cur = (map->entries)[i];
+	}
+
 	return false;
 }
 
@@ -295,17 +312,20 @@ void hashmapPrintValue(const HashMap *map, void *value) {
 
 
 char *hashmapToString(const HashMap *map) {
-	size_t length = 2;	// starting length of 2 for '{' and '}'
-	char *toReturn = toReturn = malloc(length+1);	// +1 for null terminator
+	size_t length = 1;	// starting length of 1 for opening '{'
+	char *toReturn;
 	char *keyStr;
 	char *valueStr;
-	strcpy(toReturn, "{");
 
 	if (map == NULL || map->length == 0) {
-		return strcat(toReturn, "}");
+		toReturn = malloc(length+2);	// +2 for closing '}' and null terminator
+		return strcpy(toReturn, "{}");
 	}
 
+	toReturn = malloc(length+1);	// +1 for null terminator
+	strcpy(toReturn, "{");
 	HashEntry *entry;
+
 	for (long i = 0; i < map->num_buckets; i++) {
 		entry = (map->entries)[i];
 		if (entry == NULL) {
@@ -329,8 +349,8 @@ char *hashmapToString(const HashMap *map) {
 	}
 
 	// Replace the trailing ", " with just "}"
-	toReturn[length-2] = '\0';
-	toReturn[length-3] = '}';
+	toReturn[length-1] = '\0';
+	toReturn[length-2] = '}';
 
 	return toReturn;
 }

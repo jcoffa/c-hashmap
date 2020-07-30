@@ -362,3 +362,57 @@ void hashmapPrint(const HashMap *map) {
 	free(toPrint);
 }
 
+
+char *__hashmapToStringDEBUG(const HashMap *map) {
+	size_t length = 1;	// starting length of 1 for opening '{'
+	char *toReturn;
+	char *keyStr;
+	char *valueStr;
+
+	if (map == NULL || map->length == 0) {
+		toReturn = malloc(length+2);	// +2 for closing '}' and null terminator
+		return strcpy(toReturn, "{}");
+	}
+
+	toReturn = malloc(length+1);	// +1 for null terminator
+	strcpy(toReturn, "{");
+	HashEntry *entry;
+
+	for (long i = 0; i < map->num_buckets; i++) {
+		entry = (map->entries)[i];
+		if (entry == NULL) {
+			toReturn = realloc(toReturn, length+7);
+			strcat(toReturn, "NULL, ");
+			length += 6;
+			continue;
+		}
+
+		keyStr = map->printKey(entry->key);
+		valueStr = map->printValue(entry->value);
+
+		// +4 for a ": " to separate key and value and ", " to separate entries
+		length += strlen(keyStr) + strlen(valueStr) + 4;
+
+		toReturn = realloc(toReturn, length+1);	// +1 for null terminator
+		strcat(toReturn, keyStr);
+		strcat(toReturn, ": ");
+		strcat(toReturn, valueStr);
+		strcat(toReturn, ", ");
+
+		free(keyStr);
+		free(valueStr);
+	}
+
+	// Replace the trailing ", " with just "}"
+	toReturn[length-1] = '\0';
+	toReturn[length-2] = '}';
+
+	return toReturn;
+}
+
+void __hashmapPrintDEBUG(const HashMap *map) {
+	char *toPrint = __hashmapToStringDEBUG(map);
+	printf("%s\n", toPrint);
+	free(toPrint);
+}
+

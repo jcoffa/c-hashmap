@@ -1,5 +1,4 @@
-# all, clean, move, and echo are not filenames
-.PHONY: all clean move echo
+.PHONY: all clean move bin hashmap
 
 # Directories
 SRC = src
@@ -21,13 +20,16 @@ CFLAGS := -std=c99 -Wall -Wpedantic -I$(SRC) -I$(HED) -I$(BIN)
 # Make Rules #
 ##############
 
-all: $(LIB) move
+all: hashmap move
 
-$(LIB): $(OBJS)
+hashmap: $(LIB)
+
+$(LIB): $(OBJS) | bin
 	gcc -g -shared $(OBJS) -o $(BIN)/$(LIB)
 
-$(BIN)/%.o: $(SRC)/%.c $(HED)/%.h
+$(BIN)/%.o: $(SRC)/%.c $(HED)/%.h | bin
 	gcc -g $(CFLAGS) -c -fpic $< -o $@
+
 
 
 #############
@@ -40,14 +42,6 @@ clean:
 move:
 	mv $(BIN)/$(LIB) ../
 
-echo:
-	@echo SRC = $(SRC)
-	@echo HED = $(HED)
-	@echo BIN = $(BIN)
-	@echo
-	@echo SRCS = $(SRCS)
-	@echo HEDS = $(HEDS)
-	@echo OBJS = $(OBJS)
-	@echo
-	@echo LIB = $(LIB)
+bin:
+	mkdir -p $@
 

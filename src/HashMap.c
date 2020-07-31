@@ -435,7 +435,7 @@ bool hashmapDeleteKey(HashMap *map, void *key) {
 
 
 bool hashmapContains(const HashMap *map, void *key) {
-	if (map == NULL) {
+	if (map == NULL || key == NULL) {
 		return false;
 	}
 

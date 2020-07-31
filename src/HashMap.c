@@ -13,7 +13,7 @@ static const HashEntry *const EMPTY_ENTRY = NULL;
 static const HashEntry _DUMMY_ENTRY = {0, NULL, NULL};
 
 /*
- * A special hash entry value indicating that data used to be present in thsi bucket,
+ * A special hash entry value indicating that data used to be present in this bucket,
  * but it has since been removed (by a call to `hashmapRemove` or `hashmapDeleteKey`).
  * This is necessary due to how linear probing breaks when a hole is introduced in
  * the middle of a sequence of filled buckets.
@@ -35,7 +35,7 @@ static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
  * Apparently Bernstein has gone on record saying he prefers the XOR version for standard use.
  *
  * Credit to Ozan Yigit for the code used in this algorithm.
- * Retrieved form the Unviersity of York @ Lassonde from:
+ * Retrieved form the University of York @ Lassonde from:
  *  	http://www.cse.yorku.ca/~oz/hash.html#djb2
  */
 static int64_t djb2x(void *key) {

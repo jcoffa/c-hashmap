@@ -26,6 +26,18 @@ static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
  * STATIC FUNCTION BODY DEFINITIONS *
  ************************************/
 
+/*
+ * djb2 string hashing algorithm, created by Daniel Julius Bernstein
+ *  	(https://en.wikipedia.org/wiki/Daniel_J._Bernstein)
+ *
+ * More specifically, this is the alternate version where the AND operation has been
+ * swapped out for XOR instead.
+ * Apparently Bernstein has gone on record saying he prefers the XOR version for standard use.
+ *
+ * Credit to Ozan Yigit for the code used in this algorithm.
+ * Retrieved form the Unviersity of York @ Lassonde from:
+ *  	http://www.cse.yorku.ca/~oz/hash.html#djb2
+ */
 static int64_t djb2x(void *key) {
 	char *str = (char *)key;
 	int64_t hash = 5381;

@@ -146,10 +146,10 @@ static HashEntry *hashentryNew(int64_t hash, void *key, void *value) {
  * is what the second condition represents.
  */
 static inline bool hashmapNeedsResize(const HashMap *map) {
-	if (((double)(map->length) / (double)(map->num_buckets)) > LOAD_FACTOR) {
+	if (((double)(map->length) / (double)(map->numBuckets)) > LOAD_FACTOR) {
 		return true;
 	}
-	return map->length == map->num_buckets-1;
+	return map->length == map->numBuckets-1;
 }
 
 
@@ -213,7 +213,7 @@ static bool hashmapResize(HashMap *map) {
 	// First, allocate space for the new array
 
 	// Hash map grows by a factor of 4 if it's small, or a factor of 2 if its already quite big
-	long newNumBuckets = map->num_buckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
+	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
 	HashEntry **newEntries = _makeBuckets(newNumBuckets);
 	if (map->entries == NULL) {
 		// Memory allocation for expanded entries array failed; can't really do anything to save it
@@ -223,7 +223,7 @@ static bool hashmapResize(HashMap *map) {
 	// Move all of the existing entries to the new array
 	long entriesCopied = 0;
 	HashEntry *entry;
-	for (long i = 0; entriesCopied < map->length && i < map->num_buckets; i++) {
+	for (long i = 0; entriesCopied < map->length && i < map->numBuckets; i++) {
 		entry = (map->entries)[i];
 		if (entryIsOpen(entry)) {
 			continue;
@@ -237,7 +237,7 @@ static bool hashmapResize(HashMap *map) {
 	// array and update the hash map.
 	free(map->entries);
 	map->entries = newEntries;
-	map->num_buckets = newNumBuckets;
+	map->numBuckets = newNumBuckets;
 
 	return true;
 }
@@ -257,7 +257,7 @@ HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteVal)(void *), char *(*
 }
 
 
-HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
+HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
         char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *)) {
 
 	if (deleteValue == NULL || printValue == NULL || deleteKey == NULL || printKey == NULL) {
@@ -270,7 +270,7 @@ HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*del
 		return NULL;
 	}
 
-	toReturn->entries = _makeBuckets(closestPow2(num_buckets));
+	toReturn->entries = _makeBuckets(closestPow2(numBuckets));
 	if (toReturn->entries == NULL) {
 		free(toReturn);
 		return NULL;
@@ -284,7 +284,7 @@ HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*del
 	}
 
 	toReturn->length = 0;
-	toReturn->num_buckets = num_buckets;
+	toReturn->numBuckets = numBuckets;
 	toReturn->deleteValue = deleteValue;
 	toReturn->printValue = printValue;
 	toReturn->deleteKey = deleteKey;
@@ -306,7 +306,7 @@ void hashmapClear(HashMap *map) {
 	// This while loop condition basically says "while there are entries we haven't freed yet".
 	HashEntry *entry;
 	long i = 0;
-	while (map->length > 0 && i < map->num_buckets) {
+	while (map->length > 0 && i < map->numBuckets) {
 		entry = (map->entries)[i];
 
 		if (!entryIsOpen(entry)) {
@@ -355,7 +355,7 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	map->length += _hashmapInsert(map->entries, map->num_buckets, toInsert, map->deleteValue, map->deleteKey);
+	map->length += _hashmapInsert(map->entries, map->numBuckets, toInsert, map->deleteValue, map->deleteKey);
 
 	return true;
 }
@@ -368,7 +368,7 @@ void *hashmapGet(const HashMap *map, void *key) {
 
 	void *toReturn = NULL;
 	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->num_buckets);
+	long i = labs(hashVal) % (map->numBuckets);
 	HashEntry *cur = (map->entries)[i];
 
 	while (cur != EMPTY_ENTRY) {
@@ -378,7 +378,7 @@ void *hashmapGet(const HashMap *map, void *key) {
 		}
 
 		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->num_buckets);
+		i = (i+1) % (map->numBuckets);
 		cur = (map->entries)[i];
 	}
 
@@ -393,7 +393,7 @@ void *hashmapRemove(HashMap *map, void *key) {
 
 	void *toReturn = NULL;
 	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->num_buckets);
+	long i = labs(hashVal) % (map->numBuckets);
 	HashEntry *cur = (map->entries)[i];
 
 	while (cur != EMPTY_ENTRY) {
@@ -407,7 +407,7 @@ void *hashmapRemove(HashMap *map, void *key) {
 		}
 
 		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->num_buckets);
+		i = (i+1) % (map->numBuckets);
 		cur = (map->entries)[i];
 	}
 
@@ -436,7 +436,7 @@ bool hashmapContains(const HashMap *map, void *key) {
 	}
 
 	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->num_buckets);
+	long i = labs(hashVal) % (map->numBuckets);
 	HashEntry *cur = (map->entries)[i];
 
 	while (cur != EMPTY_ENTRY) {
@@ -445,7 +445,7 @@ bool hashmapContains(const HashMap *map, void *key) {
 		}
 
 		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->num_buckets);
+		i = (i+1) % (map->numBuckets);
 		cur = (map->entries)[i];
 	}
 
@@ -507,7 +507,7 @@ char *hashmapToString(const HashMap *map) {
 	strcpy(toReturn, "{");
 	HashEntry *entry;
 
-	for (long i = 0; i < map->num_buckets; i++) {
+	for (long i = 0; i < map->numBuckets; i++) {
 		entry = (map->entries)[i];
 		if (entryIsOpen(entry)) {
 			continue;
@@ -559,7 +559,7 @@ char *__hashmapToStringDEBUG(const HashMap *map) {
 	strcpy(toReturn, "{");
 	HashEntry *entry;
 
-	for (long i = 0; i < map->num_buckets; i++) {
+	for (long i = 0; i < map->numBuckets; i++) {
 		entry = (map->entries)[i];
 		if (entry == EMPTY_ENTRY) {
 			toReturn = realloc(toReturn, length+10);

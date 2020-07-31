@@ -31,7 +31,7 @@
  * while a "large" hash map is resized to only contain 2 times as many buckets as it did previously.
  */
 #define HASHMAP_LARGE_SIZE (65536)	// = 2^16
-#define HASHMAP_IS_LARGE(map) (map->num_buckets >= HASHMAP_LARGE_SIZE)
+#define HASHMAP_IS_LARGE(map) (map->numBuckets >= HASHMAP_LARGE_SIZE)
 
 
 /*
@@ -95,7 +95,7 @@ typedef struct hashMapEntry {
 typedef struct hashMapHead {
 	HashEntry **entries;	// The key-value pairs stored in the hash map
 	long length;			// The number of entries currently in the hash map
-	long num_buckets;		// The maximum number of entries the hash map can hold.
+	long numBuckets;		// The maximum number of entries the hash map can hold.
 	                 		// For a new hash map, this field is equal to DEFAULT_BUCKETS.
 
 	int64_t (*hash)(void *);		// Hash function pointer to turn a key into an 8-byte signed integer
@@ -147,7 +147,7 @@ HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteValue)(void *), char *
  * such that `B <= N`. For example, if 20 is given as the starting number of buckets, the created
  * hash map will actually have 32 buckets instead.
  */
-HashMap *hashmapNewBuckets(long num_buckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
+HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
         char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *));
 
 

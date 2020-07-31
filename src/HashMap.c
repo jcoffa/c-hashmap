@@ -212,8 +212,11 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
  */
 static bool hashmapResize(HashMap *map) {
 	// First, allocate space for the new array.
+	// Hash map grows by a factor of 4 if it's "small", or a factor of 2 if its "large".
+	//
+	// See the comment for the HASHMAP_IS_LARGE macro in include/HashMap.h for the significance
+	// of the "small" and "large" hash maps.
 
-	// Hash map grows by a factor of 4 if it's small, or a factor of 2 if its already quite big
 	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
 	HashEntry **newEntries = _makeBuckets(newNumBuckets);
 	if (map->entries == NULL) {

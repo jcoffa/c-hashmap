@@ -156,31 +156,38 @@ static inline bool hashmapNeedsResize(const HashMap *map) {
 /*
 * Inserts the new hash entry into the hash entry array without attempting to resize it.
 *
+* If the inserted key is already in the hashmap, the old value is replaced with the new one.
+* This is why the deleteVal and deleteKey function pointers are needed for insertion.
+*
 * Returns 1 if the new entry didn't overlap an existing entry and the length of the
 * hash map needs to be incremented by the caller.
-* Returns 0 otherwise.
+* Returns 0 otherwise, indicating the length of the hash map need not be changed.
 */
-static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert) {
-   char entryWasNew = 1;
-   long i = labs(toInsert->hash) % (length);
+static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert, void (*deleteVal)(void*), \
+		void (*deleteKey)(void*)) {
 
-   // Find an empty spot in the hash map by linear probing
-   while (!entryIsOpen(entries[i])) {
-	   // TODO check if current entry has the same hash as what we're trying to insert.
-	   // If it does, then free the old value (don't have to free the entire entry) and replace it.
 
-	   /*
-	   ...
-	   entryWasNew = 0;
-	   break;
-	   */
+	char entryWasNew = 1;
+	long i = labs(toInsert->hash) % (length);
 
-	   // Wrap the index around the end of the array if necessary
-	   i = (i+1) % (length);
-   }
+	// Find an empty spot in the hash map by linear probing
+	while (!entryIsOpen(entries[i])) {
+		if (entries[i]->hash == toInsert->hash) {
+			// The insertion key is the same as a key already in the hash map.
+			// Free the old data so that it can be replaced by the new data.
+			deleteVal(entries[i]->value);
+			deleteKey(entries[i]->key);
+			free(entries[i]);
+			entryWasNew = 0;
+			break;
+		}
 
-   entries[i] = toInsert;
-   return entryWasNew;
+		// Wrap the index around the end of the array if necessary
+		i = (i+1) % (length);
+	}
+
+	entries[i] = toInsert;
+	return entryWasNew;
 }
 
 
@@ -222,7 +229,7 @@ static bool hashmapResize(HashMap *map) {
 			continue;
 		}
 
-		_hashmapInsert(newEntries, newNumBuckets, entry);
+		_hashmapInsert(newEntries, newNumBuckets, entry, map->deleteValue, map->deleteKey);
 		entriesCopied++;
 	}
 
@@ -348,7 +355,7 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	map->length += _hashmapInsert(map->entries, map->num_buckets, toInsert);
+	map->length += _hashmapInsert(map->entries, map->num_buckets, toInsert, map->deleteValue, map->deleteKey);
 
 	return true;
 }

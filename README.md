@@ -1,9 +1,23 @@
+- [Hash Maps Are Awesome](#hash-maps-are-awesome)
+- [Building](#building)
+- [Usage](#usage)
+  - [Create a New Hash Map](#create-a-new-hash-map)
+    - [The hash function](#the-hash-function)
+    - [The deleteValue function](#the-deletevalue-function)
+    - [The printValue function](#the-printvalue-function)
+    - [The deleteKey function](#the-deletekey-function)
+    - [The printKey function](#the-printkey-function)
+    - [Putting it all together](#putting-it-all-together)
+  - [Inserting Entries](#inserting-entries)
+  - [Removing Entries](#removing-entries)
+  - [Membership Testing](#membership-testing)
+  - [Getting Values](#getting-values)
+  - [String Conversion and Printing](#string-conversion-and-printing)
+  - [Freeing the Hash Map](#freeing-the-hash-map)
 
-{:no_toc}
+---
 
-- Hash Maps Are Awesome
-{:toc}
-
+<a name="hash-maps-are-awesome"></a>
 ## Hash Maps Are Awesome
 
 ... so it's unfortunate that C's standard library doesn't provide any data structures. I wanted to
@@ -13,17 +27,20 @@ fix that! This library provides a hash map structure that supports a number of f
 - automatic memory management and resizing (the actual structure must be freed manually, however)
 - print the entire map with one function call
 
+<a name="building"></a>
 ## Building
 As easy as entering the cloned repo and running `make`. Because of how I setup my own directory
 structure (I primarily made this library for my own personal use) the library is placed in the
 directory _above_ the cloned repo. If this annoys you, just run `make hashmap` instead and the
 library will be placed in the `bin` directory within the project tree.
 
+<a name="usage"></a>
 ## Usage
 Not every function will be covered in this section, but it'll be enough to start using the hash map.
 
 Since all created hash maps are generic, all of its key and value arguments are of type `void *`.
 
+<a name="create-a-new-hash-map"></a>
 ### Create a New Hash Map
 To create a hash map, use `hashmapNew` with the following signature:
 
@@ -71,6 +88,7 @@ Foo *newFoo(uint16_t value, char *name) {
 }
 ```
 
+<a name="the-hash-function"></a>
 #### The hash function
 
 The first argument `hash` is a function pointer that takes a generic key and hashes it into a 64-bit
@@ -96,6 +114,7 @@ int64_t djb2(void *key) {
 }
 ```
 
+<a name="the-deletevalue-function"></a>
 #### The deleteValue function
 
 The second argument `deleteValue` is a function pointer that takes a generic value and frees all
@@ -110,6 +129,7 @@ void deleteFoo(void *value) {
 }
 ```
 
+<a name="the-printvalue-function"></a>
 #### The printValue function
 
 The third argument `printValue` is a function pointer that takes a value from the hash map, turns
@@ -134,6 +154,7 @@ char *printFoo(void *value) {
 }
 ```
 
+<a name="the-deletekey-function"></a>
 #### The deleteKey function
 
 The fourth argument `deleteKey` is a function pointer that takes a generic key and frees all memory
@@ -146,6 +167,7 @@ void deleteStr(void *key) {
 }
 ```
 
+<a name="the-printkey-function"></a>
 #### The printKey function
 
 The fifth and final argument `printKey` is a function pointer that takes a generic key from the hash
@@ -161,6 +183,7 @@ char *printStr(void *key) {
 ```
 
 
+<a name="putting-it-all-together"></a>
 #### Putting it all together
 
 Now that all of the necessary functions are written (it wasn't even that difficult!) the hash map
@@ -183,20 +206,17 @@ HashMap *map = hashmapNewBuckets(64, DEFAULT_HASH, deleteFoo, printFoo, deleteSt
 // Insert a bunch of entries without having to worry about resize overhead ...
 ```
 
-<div class="panel panel-info">
-**Note**
-{: .panel-heading}
-<div class="panel-body">
+---
 
-The amount of buckets will automatically change to the smallest power of two that is equal to or
+**Note**: The amount of buckets will automatically change to the smallest power of two that is equal to or
 greater than the amount of buckets you specified. For example, `hashmapNewBuckets(24, ...)` will
 create a hash map with 32 empty buckets (since 32 = 2<sup>5</sup> is the smallest power of 2 that
 is >= 24)
 
-</div>
-</div>
+---
 
 
+<a name="inserting-entries"></a>
 ### Inserting Entries
 
 Now that a hash map has been created, we can insert key-value pair entries into it using the
@@ -236,18 +256,16 @@ strcpy(key, "12345");
 hashmapInsert(key, newFoo(12345, "number 12345"));
 ```
 
-<div class="panel panel-warning">
-**Note**
-{: .panel-heading}
-<div class="panel-body">
+---
 
-If the provided `key` is already present in the hash map when inserting, then it will be
+**Note**: If the provided `key` is already present in the hash map when inserting, then it will be
 overridden with the new data. The old value stored at this key will be freed and removed from the
 hash map.
 
-</div>
-</div>
+---
 
+
+<a name="removing-entries"></a>
 ### Removing Entries
 
 To remove an entry from the hashmap, us either the `hashmapRemove` or `hahsmapDeleteKey` function.
@@ -279,6 +297,7 @@ bool ret = hashmapDeleteKey(map, "55");
 ```
 
 
+<a name="membership-testing"></a>
 ### Membership Testing
 
 To determine whether a given key is present in the hash map, use `hashmapContains`. It's signature
@@ -305,6 +324,7 @@ ret = hashmapContains(map, "this key is not in the hash map");
 ```
 
 
+<a name="getting-values"></a>
 ### Getting Values
 
 To retrieve values at a certain key in the hash map, use `hashmapGet`. It's signature is as follows:
@@ -326,6 +346,7 @@ hashmapInsert(map, key, newFoo(42, "number 42"));
 Foo *value = hashmapGet(map, "42");
 ```
 
+<a name="string-conversion-and-printing"></a>
 ### String Conversion and Printing
 
 There are functions available to take values or the entire hash map and convert them to strings or
@@ -348,6 +369,7 @@ void hashmapPrint(const HashMap *map);
 ```
 
 
+<a name="freeing-the-hash-map"></a>
 ### Freeing the Hash Map
 
 While all the internal memory is managed automatically, the hash map itself must be freed after it's

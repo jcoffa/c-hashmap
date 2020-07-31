@@ -146,6 +146,9 @@ HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteValue)(void *), char *
  * The starting number of buckets, `B`, will be converted to the smallest power of two, `N`,
  * such that `B <= N`. For example, if 20 is given as the starting number of buckets, the created
  * hash map will actually have 32 buckets instead.
+ *
+ * Returns a fresh HashMap struct on a success.
+ * Returns NULL if numBuckets is negative or 0 in addition to the NULL conditions of the `hashmapNew` function.
  */
 HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
         char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *));

@@ -10,7 +10,11 @@ static const HashEntry *const EMPTY_ENTRY = NULL;
 
 
 // _DUMMY_ENTRY SHOULD NEVER BE USED DIRECTLY; it is only used to set the pointer constant DUMMY_ENTRY
-static const HashEntry _DUMMY_ENTRY = {0, NULL, NULL};
+static const HashEntry _DUMMY_ENTRY = {
+	0,		// hash value
+	NULL,	// pointer to key
+	NULL,	// pointer to value
+};
 
 /*
  * A special hash entry value indicating that data used to be present in this bucket,
@@ -77,16 +81,14 @@ static inline bool entryIsOpen(HashEntry *entry) {
 
 
 /*
+ * The numBuckets can't be negative or 0 before calling this function.
+ *
  * Allocates and returns a new array of hash map entries of the specified length.
  * All buckets are initialized to empty.
  *
  * Returns NULL instead of any memory allocation fails or if numBuckets is negative.
  */
 static HashEntry **_makeBuckets(long numBuckets) {
-	if (numBuckets < 0) {
-		return NULL;
-	}
-
 	HashEntry **toReturn = malloc(sizeof(HashEntry) * numBuckets);
 	if (toReturn == NULL) {
 		return NULL;
@@ -101,16 +103,14 @@ static HashEntry **_makeBuckets(long numBuckets) {
 
 
 /*
+ * The key can't be NULL before calling this function.
+ *
  * Allocates and returns a new HashEntry to be put into a HashMap.
  *
- * Returns NULL instead if any memory allocation fails, or the key is NULL.
+ * Returns NULL instead if any memory allocation fails.
  * Hash map values are allowed to be NULL, but keys are not.
  */
 static HashEntry *hashentryNew(int64_t hash, void *key, void *value) {
-	if (key == NULL) {
-		return NULL;
-	}
-
 	HashEntry *toReturn = malloc(sizeof(HashEntry));
 
 	if (toReturn == NULL) {
@@ -154,15 +154,17 @@ static inline bool hashmapNeedsResize(const HashMap *map) {
 
 
 /*
-* Inserts the new hash entry into the hash entry array without attempting to resize it.
-*
-* If the inserted key is already in the hashmap, the old value is replaced with the new one.
-* This is why the deleteVal and deleteKey function pointers are needed for insertion.
-*
-* Returns 1 if the new entry didn't overlap an existing entry and the length of the
-* hash map needs to be incremented by the caller.
-* Returns 0 otherwise, indicating the length of the hash map need not be changed.
-*/
+ * The hash map can't be NULL before calling this function.
+ *
+ * Inserts the new hash entry into the hash entry array without attempting to resize it.
+ *
+ * If the inserted key is already in the hashmap, the old value is replaced with the new one.
+ * This is why the deleteVal and deleteKey function pointers are needed for insertion.
+ *
+ * Returns 1 if the new entry didn't overlap an existing entry and the length of the
+ * hash map needs to be incremented by the caller.
+ * Returns 0 otherwise, indicating the length of the hash map need not be changed.
+ */
 static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert, void (*deleteVal)(void*), \
 		void (*deleteKey)(void*)) {
 
@@ -192,6 +194,8 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
 
 
 /*
+ * The hash map can't be NULL before calling this function.
+ *
  * Resizes the hash map so that it holds four times as many buckets as it did previously.
  * Once the hash map becomes sufficiently large (its number of buckets is at least HASHMAP_LARGE_SIZE)
  * the hash map is only resized to hold twice as many buckets as it did previously.
@@ -199,18 +203,15 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
  * All its entries are reinserted into the buckets after resizing, potentially receiving
  * a new position in the hash map thanks to the increase in open space and size.
  *
- * This is a pretty expensive operation that should performed as infrequently as possible.
+ * This is a pretty expensive operation that should be performed as infrequently as possible.
  * This cost is part of the reason why these hash maps are resized to be so massive.
+ * The fewer times we have to resize the hash map the better!
  *
- * Returns false if the hash map is NULL, or if any memory allocation fails.
+ * Returns false if any memory allocation fails.
  * Returns true otherwise, indicating a successful operation.
  */
 static bool hashmapResize(HashMap *map) {
-	if (map == NULL) {
-		return false;
-	}
-
-	// First, allocate space for the new array
+	// First, allocate space for the new array.
 
 	// Hash map grows by a factor of 4 if it's small, or a factor of 2 if its already quite big
 	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
@@ -260,7 +261,7 @@ HashMap *hashmapNew(int64_t (*hash)(void *), void (*deleteVal)(void *), char *(*
 HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*deleteValue)(void *), \
         char *(*printValue)(void *), void (*deleteKey)(void *), char *(*printKey)(void *)) {
 
-	if (deleteValue == NULL || printValue == NULL || deleteKey == NULL || printKey == NULL) {
+	if (deleteValue == NULL || printValue == NULL || deleteKey == NULL || printKey == NULL || numBuckets <= 0) {
 		return NULL;
 	}
 

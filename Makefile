@@ -13,7 +13,7 @@ HEDS := $(wildcard $(HED)/*.h)
 OBJS := $(addprefix $(BIN)/,$(notdir $(SRCS:%.c=%.o)))
 
 # Compilation options
-CFLAGS := -std=c99 -Wall -Wpedantic -I$(SRC) -I$(HED) -I$(BIN)
+CFLAGS := -std=c99 -Wall -Wpedantic -I$(SRC) -I$(HED) -I$(BIN) -O2
 
 
 ##############

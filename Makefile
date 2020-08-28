@@ -1,4 +1,5 @@
-.PHONY: all clean move bin hashmap
+# Name of the library in all lowercase letters
+PROG = hashmap
 
 # Directories
 SRC = src
@@ -7,7 +8,7 @@ BIN = bin
 VPATH := $(SRC):$(HED):$(BIN)
 
 # Files
-LIB = libhashmap.so
+LIB = lib$(PROG).so
 SRCS := $(wildcard $(SRC)/*.c)
 HEDS := $(wildcard $(HED)/*.h)
 OBJS := $(addprefix $(BIN)/,$(notdir $(SRCS:%.c=%.o)))
@@ -19,17 +20,17 @@ CFLAGS := -std=c99 -Wall -Wpedantic -I$(SRC) -I$(HED) -I$(BIN) -O2
 ##############
 # Make Rules #
 ##############
+.PHONY: all $(PROG) clean move $(BIN)
 
-all: hashmap move
+all: $(PROG) move
 
-hashmap: $(LIB)
+$(PROG): $(LIB)
 
-$(LIB): $(OBJS) | bin
+$(LIB): $(OBJS) | $(BIN)
 	gcc -g -shared $(OBJS) -o $(BIN)/$(LIB)
 
-$(BIN)/%.o: $(SRC)/%.c $(HED)/%.h | bin
+$(BIN)/%.o: $(SRC)/%.c $(HED)/%.h | $(BIN)
 	gcc -g $(CFLAGS) -c -fpic $< -o $@
-
 
 
 #############
@@ -42,6 +43,6 @@ clean:
 move:
 	mv $(BIN)/$(LIB) ../
 
-bin:
+$(BIN):
 	mkdir -p $@
 

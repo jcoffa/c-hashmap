@@ -54,15 +54,15 @@ HashMap *hashmapNew(int64_t (*hash)(void *), \
 using the library's default value of 16:
 
 ```c
-HashMap *hashmapNew(long numBuckets, int64_t (*hash)(void *), \
-                    void (*deleteValue)(void *), char *(*printValue)(void *), \
-                    void (*deleteKey)(void *), char *(*printKey)(void *));
+HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), \
+                           void (*deleteValue)(void *), char *(*printValue)(void *), \
+                           void (*deleteKey)(void *), char *(*printKey)(void *));
 ```
 
 These may look complicated but it's really not so bad once you know what it all means. Since all
-created hash maps are generic, you have to write 4 (or 5 if you want to roll in your own hash
-function) in order to allow the hash map to free and print its keys and values. All of the functions
-use `void` pointer arguments since all of its data is generic.
+created hash maps are generic, you have to write 4 functions (or 5 if you want to roll in your own hash
+function) in order to allow the hash map to free and print its keys and values.
+All of the functions use `void` pointer arguments since all of its data is generic.
 
 In order to help describe how these functions should be written, the following structure will be
 used as the values stored by the hash map (its keys will be strings):
@@ -135,7 +135,7 @@ void deleteFoo(void *value) {
 The third argument `printValue` is a function pointer that takes a value from the hash map, turns
 it into a string, and returns it. You'll need to allocate memory using `malloc` or the like in order
 to return the string; any strings local to the function will become invalid once the function
-returns. The function does not actually do any printing (bit of an unfortunate name). Using the
+returns. The function does not actually do any printing (its name is misleading). Using the
 example Foo struct, a `printFoo` function may look as follows:
 
 ```c
@@ -173,7 +173,7 @@ void deleteStr(void *key) {
 The fifth and final argument `printKey` is a function pointer that takes a generic key from the hash
 map, turns it into a string, and returns it. You'll need to allocate memory using `malloc` or the
 like in order to return the string; any strings local to the function will become invalid once the
-function returns. The function does not actually do any printing (bit of an unfortunate name). This
+function returns. The function does not actually do any printing (its name is misleading). This
 example hash map uses strings as keys already, so this function is quite simple to imagine:
 
 ```c
@@ -269,7 +269,7 @@ hash map.
 ### Removing Entries
 
 To remove an entry from the hashmap, us either the `hashmapRemove` or `hahsmapDeleteKey` function.
-Their function signatures explain how they're different:
+Their return values help to explain how they're different:
 
 ```c
 void *hashmapRemove(HashMap *map, void *key);
@@ -373,13 +373,13 @@ void hashmapPrint(const HashMap *map);
 ### Freeing the Hash Map
 
 While all the internal memory is managed automatically, the hash map itself must be freed after it's
-done being used. The function `hashmapDelete` does exactly this:
+done being used. The function `hashmapFree` does exactly this:
 
 ```c
 void hashmapFree(HashMap *map);
 ```
 
-Using it is equally as straightforward as its function signature:
+Using it is as straightforward as its function signature implies:
 
 ```c
 int main(void) {

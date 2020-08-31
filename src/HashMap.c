@@ -42,7 +42,7 @@ static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
  * Retrieved form the University of York @ Lassonde from:
  *  	http://www.cse.yorku.ca/~oz/hash.html#djb2
  */
-static int64_t djb2x(void *key) {
+static int64_t _djb2x(void *key) {
 	char *str = (char *)key;
 	int64_t hash = 5381;
 	int c;
@@ -57,9 +57,9 @@ static int64_t djb2x(void *key) {
 /*
  * Returns the smallest power of 2, N, such that: `x <= N`.
  *
- * For example, closestPow2(20) = 32 (32 is the smallest power of 2 that is >= 20)
+ * For example, _closestPow2(20) = 32 (32 is the smallest power of 2 that is >= 20)
  */
-static long closestPow2(long x) {
+static long _closestPow2(long x) {
 	int toReturn = 1;
 
 	while (toReturn < x) {
@@ -75,7 +75,7 @@ static long closestPow2(long x) {
  *
  * Returns false otherwise, indicating that the entry contains legitimate data.
  */
-static inline bool entryIsOpen(HashEntry *entry) {
+static inline bool _entryIsOpen(HashEntry *entry) {
 	return (entry == EMPTY_ENTRY || entry == DUMMY_ENTRY);
 }
 
@@ -110,7 +110,7 @@ static HashEntry **_makeBuckets(long numBuckets) {
  * Returns NULL instead if any memory allocation fails.
  * Hash map values are allowed to be NULL, but keys are not.
  */
-static HashEntry *hashentryNew(int64_t hash, void *key, void *value) {
+static HashEntry *_hashentryNew(int64_t hash, void *key, void *value) {
 	HashEntry *toReturn = malloc(sizeof(HashEntry));
 
 	if (toReturn == NULL) {
@@ -145,7 +145,7 @@ static HashEntry *hashentryNew(int64_t hash, void *key, void *value) {
  * This special case where an insertion would compromise the integrity of hash map lookups
  * is what the second condition represents.
  */
-static inline bool hashmapNeedsResize(const HashMap *map) {
+static inline bool _hashmapNeedsResize(const HashMap *map) {
 	if (((double)(map->length) / (double)(map->numBuckets)) > LOAD_FACTOR) {
 		return true;
 	}
@@ -173,7 +173,7 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
 	long i = labs(toInsert->hash) % (length);
 
 	// Find an empty spot in the hash map by linear probing
-	while (!entryIsOpen(entries[i])) {
+	while (!_entryIsOpen(entries[i])) {
 		if (entries[i]->hash == toInsert->hash) {
 			// The insertion key is the same as a key already in the hash map.
 			// Free the old data so that it can be replaced by the new data.
@@ -210,7 +210,7 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
  * Returns false if any memory allocation fails.
  * Returns true otherwise, indicating a successful operation.
  */
-static bool hashmapResize(HashMap *map) {
+static bool _hashmapResize(HashMap *map) {
 	// First, allocate space for the new array.
 	// Hash map grows by a factor of 4 if it's "small", or a factor of 2 if its "large".
 	//
@@ -229,7 +229,7 @@ static bool hashmapResize(HashMap *map) {
 	HashEntry *entry;
 	for (long i = 0; entriesCopied < map->length && i < map->numBuckets; i++) {
 		entry = (map->entries)[i];
-		if (entryIsOpen(entry)) {
+		if (_entryIsOpen(entry)) {
 			continue;
 		}
 
@@ -274,7 +274,7 @@ HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*dele
 		return NULL;
 	}
 
-	toReturn->entries = _makeBuckets(closestPow2(numBuckets));
+	toReturn->entries = _makeBuckets(_closestPow2(numBuckets));
 	if (toReturn->entries == NULL) {
 		free(toReturn);
 		return NULL;
@@ -282,7 +282,7 @@ HashMap *hashmapNewBuckets(long numBuckets, int64_t (*hash)(void *), void (*dele
 
 	// If hash function was not given, then use the djb2x hash function for string (char *) data
 	if (hash == DEFAULT_HASH) {
-		toReturn->hash = djb2x;
+		toReturn->hash = _djb2x;
 	} else {
 		toReturn->hash = hash;
 	}
@@ -313,7 +313,7 @@ void hashmapClear(HashMap *map) {
 	while (map->length > 0 && i < map->numBuckets) {
 		entry = (map->entries)[i];
 
-		if (!entryIsOpen(entry)) {
+		if (!_entryIsOpen(entry)) {
 			map->deleteValue(entry->value);
 			map->deleteKey(entry->key);
 			free(entry);
@@ -344,16 +344,16 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 	}
 
 	// Resize the hash map
-	if (hashmapNeedsResize(map)) {
-		// hashmapResize returns false on an error
-		if (!hashmapResize(map)) {
-			// If the resize fails, then there's no sense in trying to continue
+	if (_hashmapNeedsResize(map)) {
+		// _hashmapResize returns false on an error
+		if (!_hashmapResize(map)) {
+			// The resize has failed. There's no sense in trying to continue
 			return false;
 		}
 	}
 
 	int64_t hashVal = map->hash(key);
-	HashEntry *toInsert = hashentryNew(hashVal, key, value);
+	HashEntry *toInsert = _hashentryNew(hashVal, key, value);
 	if (toInsert == NULL) {
 		// Memory allocation failure
 		return false;
@@ -513,7 +513,7 @@ char *hashmapToString(const HashMap *map) {
 
 	for (long i = 0; i < map->numBuckets; i++) {
 		entry = (map->entries)[i];
-		if (entryIsOpen(entry)) {
+		if (_entryIsOpen(entry)) {
 			continue;
 		}
 

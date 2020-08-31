@@ -219,7 +219,7 @@ static bool hashmapResize(HashMap *map) {
 
 	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
 	HashEntry **newEntries = _makeBuckets(newNumBuckets);
-	if (map->entries == NULL) {
+	if (newEntries == NULL) {
 		// Memory allocation for expanded entries array failed; can't really do anything to save it
 		return false;
 	}

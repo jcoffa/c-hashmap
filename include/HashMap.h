@@ -31,7 +31,7 @@
  * while a "large" hash map is resized to only contain 2 times as many buckets as it did previously.
  */
 #define HASHMAP_LARGE_SIZE (65536)	// = 2^16
-#define HASHMAP_IS_LARGE(map) (map->numBuckets >= HASHMAP_LARGE_SIZE)
+#define HASHMAP_IS_LARGE(map) ((map)->numBuckets >= HASHMAP_LARGE_SIZE)
 
 
 /*

@@ -5,7 +5,9 @@
  * INTERNAL USE *
  ****************/
 
+// Returned by the index calculation function, _hashmapGetIndex(map, key), when key was not found in map.
 static const long ENTRY_NOT_FOUND = -1;
+
 
 // A special hash entry value indicating no data is present in a bucket
 static const HashEntry *const EMPTY_ENTRY = NULL;
@@ -25,6 +27,8 @@ static const HashEntry _DUMMY_ENTRY = {
  * the middle of a sequence of filled buckets.
  */
 static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
+
+
 
 
 
@@ -79,6 +83,70 @@ static long _closestPow2(long x) {
  */
 static inline bool _entryIsOpen(HashEntry *entry) {
 	return entry == EMPTY_ENTRY || entry == DUMMY_ENTRY;
+}
+
+
+/*
+ * The entries array can't be NULL and the length can't be <= 0 before calling this function.
+ *
+ * Returns the index where key either should be or is currently stored.
+ */
+static long _findSlotEntries(HashEntry **entries, long length, int64_t hashVal) {
+	long i = labs(hashVal) % length;
+	const HashEntry *cur = entries[i];
+
+	while (cur != EMPTY_ENTRY && cur->hash != hashVal) {
+		// Wrap the index around the end of the array if necessary
+		i = (i+1) % length;
+		cur = entries[i];
+	}
+
+	return i;
+}
+
+
+/*
+ * Both the hash map and the key can't be NULL before calling this function.
+ *
+ * This is an internal convenience function that allows for finding an index to store a key
+ * when the caller has access to a proper hash map struct.
+ */
+static inline long _findSlotMap(const HashMap *map, void *key) {
+	return _findSlotEntries(map->entries, map->numBuckets, map->hash(key));
+}
+
+
+/*
+ * Both the hash map and the key can't be NULL before calling this function.
+ *
+ * Returns the index where key is stored in the hash map, or ENTRY_NOT_FOUND if it isn't stored by the hash map.
+ */
+static long _hashmapGetIndex(const HashMap *map, void *key) {
+	long idx = _findSlotMap(map, key);
+	return _entryIsOpen((map->entries)[idx]) ? ENTRY_NOT_FOUND : idx;
+}
+
+
+/*
+ * The hash map can't be NULL before calling this function.
+ * The index can't be out of bounds of the hash map's entries array before calling this function.
+ * The index must resolve to a valid key-value pair within the hash map.
+ *
+ * Removes the key-value pair at the given index within the hash map's entries array,
+ * and frees all associated memory EXCEPT for the value.
+ *
+ * Returns the value stored in the key-value pair that was removed.
+ */
+static void *_hashmapRemoveIndex(HashMap *map, long i) {
+	HashEntry *toRemove = (map->entries)[i];
+	void *toReturn = toRemove->value;
+
+	map->deleteKey(toRemove->key);
+	free(toRemove);
+	(map->entries)[i] = (HashEntry *)DUMMY_ENTRY;
+	(map->length)--;
+
+	return toReturn;
 }
 
 
@@ -170,24 +238,16 @@ static inline bool _hashmapNeedsResize(const HashMap *map) {
 static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert, void (*deleteVal)(void*), \
 		void (*deleteKey)(void*)) {
 
-
 	char entryWasNew = 1;
-	long i = labs(toInsert->hash) % (length);
+	long i = _findSlotEntries(entries, length, toInsert->hash);
 
-	// Find an empty spot in the hash map by linear probing
-	while (!_entryIsOpen(entries[i])) {
-		if (entries[i]->hash == toInsert->hash) {
-			// The insertion key is the same as a key already in the hash map.
-			// Free the old data so that it can be replaced by the new data.
-			deleteVal(entries[i]->value);
-			deleteKey(entries[i]->key);
-			free(entries[i]);
-			entryWasNew = 0;
-			break;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % length;
+	if (!_entryIsOpen(entries[i])) {
+		// An entry with this key is already in the hash map.
+		// Free the old data so that it can be replaced by the new data.
+		deleteVal(entries[i]->value);
+		deleteKey(entries[i]->key);
+		free(entries[i]);
+		entryWasNew = 0;
 	}
 
 	entries[i] = toInsert;
@@ -219,7 +279,7 @@ static bool _hashmapResize(HashMap *map) {
 	// See the comment for the HASHMAP_IS_LARGE macro in include/HashMap.h for the
 	// significance of "small" and "large" hash maps.
 
-	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
+	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2 : 4);
 	HashEntry **newEntries = _makeBuckets(newNumBuckets);
 	if (newEntries == NULL) {
 		// Memory allocation for expanded entries array failed; can't really do anything to save it
@@ -246,53 +306,6 @@ static bool _hashmapResize(HashMap *map) {
 	map->numBuckets = newNumBuckets;
 
 	return true;
-}
-
-
-/*
- * Both the hash map and the key can't be NULL before calling this function.
- *
- * Returns the index where key is stored in the hash map, or ENTRY_NOT_FOUND if it isn't stored by the hash map.
- */
-static long _hashmapGetIndex(const HashMap *map, void *key) {
-	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->numBuckets);
-	HashEntry *cur = (map->entries)[i];
-
-	while (cur != EMPTY_ENTRY) {
-		if (cur != DUMMY_ENTRY && cur->hash == hashVal) {
-			return i;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % map->numBuckets;
-		cur = (map->entries)[i];
-	}
-
-	return ENTRY_NOT_FOUND;
-}
-
-
-/*
- * The hash map can't be NULL before calling this function.
- * The index can't be out of bounds of the hash map's entries array before calling this function.
- * The index must resolve to a valid key-value pair within the hash map.
- *
- * Removes the key-value pair at the given index within the hash map's entries array,
- * and frees all associated memory EXCEPT for the value.
- *
- * Returns the value stored in the key-value pair that was removed.
- */
-static void *_hashmapRemoveIndex(HashMap *map, long i) {
-	HashEntry *toRemove = (map->entries)[i];
-	void *toReturn = toRemove->value;
-
-	map->deleteKey(toRemove->key);
-	free(toRemove);
-	(map->entries)[i] = (HashEntry *)DUMMY_ENTRY;
-	(map->length)--;
-
-	return toReturn;
 }
 
 

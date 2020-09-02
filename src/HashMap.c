@@ -13,20 +13,17 @@ static const long ENTRY_NOT_FOUND = -1;
 static const HashEntry *const EMPTY_ENTRY = NULL;
 
 
-// _DUMMY_ENTRY SHOULD NEVER BE USED DIRECTLY; it is only used to set the pointer constant DUMMY_ENTRY
-static const HashEntry _DUMMY_ENTRY = {
-	0,		// hash value
-	NULL,	// pointer to key
-	NULL,	// pointer to value
-};
-
 /*
  * A special hash entry value indicating that data used to be present in this bucket,
  * but it has since been removed (by a call to `hashmapRemove` or `hashmapDeleteKey`).
  * This is necessary due to how linear probing breaks when a hole is introduced in
  * the middle of a sequence of filled buckets.
  */
-static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
+static const HashEntry *const REMOVED_ENTRY = &(HashEntry) {
+	.hash = 0,
+	.key = NULL,
+	.value = NULL
+};
 
 
 
@@ -77,12 +74,12 @@ static long _closestPow2(long x) {
 
 
 /*
- * Returns true if the given entry is either of the special hash entry values (EMPTY_ENTRY or DUMMY_ENTRY).
+ * Returns true if the given entry is either of the special hash entry values (EMPTY_ENTRY or REMOVED_ENTRY).
  *
  * Returns false otherwise, indicating that the entry contains legitimate data.
  */
 static inline bool _entryIsOpen(HashEntry *entry) {
-	return entry == EMPTY_ENTRY || entry == DUMMY_ENTRY;
+	return entry == EMPTY_ENTRY || entry == REMOVED_ENTRY;
 }
 
 
@@ -121,7 +118,7 @@ static inline long _findSlotMap(const HashMap *map, void *key) {
  *
  * Returns the index where key is stored in the hash map, or ENTRY_NOT_FOUND if it isn't stored by the hash map.
  */
-static long _hashmapGetIndex(const HashMap *map, void *key) {
+static inline long _hashmapGetIndex(const HashMap *map, void *key) {
 	long idx = _findSlotMap(map, key);
 	return _entryIsOpen((map->entries)[idx]) ? ENTRY_NOT_FOUND : idx;
 }
@@ -143,7 +140,7 @@ static void *_hashmapRemoveIndex(HashMap *map, long i) {
 
 	map->deleteKey(toRemove->key);
 	free(toRemove);
-	(map->entries)[i] = (HashEntry *)DUMMY_ENTRY;
+	(map->entries)[i] = (HashEntry *)REMOVED_ENTRY;
 	(map->length)--;
 
 	return toReturn;
@@ -404,10 +401,10 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	// Resize the hash map
+	// Resize the hash map if necessary
 	if (_hashmapNeedsResize(map) && !_hashmapResize(map)) {
 		// (_hashmapResize returns false on an error)
-		// The resize has failed. There's no sense in trying to continue.
+		// A resize was needed, and it failed. There's no sense in trying to continue.
 		return false;
 	}
 
@@ -530,7 +527,9 @@ char *hashmapToString(const HashMap *map) {
 		keyStr = map->printKey(entry->key);
 		valueStr = map->printValue(entry->value);
 
-		// +4 for a ": " to separate key and value and ", " to separate entries
+		// +2 for ": " to delimit key-value pairs (key: value)
+		// +2 for ", " to delimit entries (key: value, key: value, key: value, ...)
+		// = +4
 		length += strlen(keyStr) + strlen(valueStr) + 4;
 
 		toReturn = realloc(toReturn, length+1);	// +1 for null terminator
@@ -580,10 +579,10 @@ char *__hashmapToStringDEBUG(const HashMap *map) {
 			strcat(toReturn, "<EMPTY>, ");
 			length += 9;
 			continue;
-		} else if (entry == DUMMY_ENTRY) {
-			toReturn = realloc(toReturn, length+10);
-			strcat(toReturn, "<DUMMY>, ");
-			length += 9;
+		} else if (entry == REMOVED_ENTRY) {
+			toReturn = realloc(toReturn, length+12);
+			strcat(toReturn, "<REMOVED>, ");
+			length += 11;
 			continue;
 		}
 

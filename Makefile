@@ -36,9 +36,7 @@ $(BIN)/%.o: $(SRC)/%.c $(HED)/%.h | $(BIN)
 
 tests: $(TESTS)
 
-# TODO write compilation for tests
-.SECONDEXPANSION:
-$(TESTS): $$@.c | $(LIB)
+$(TESTS): %: %.c | $(LIB)
 	gcc -g $(CFLAGS) -L$(BIN) -l$(PROG) $< -o $@
 
 

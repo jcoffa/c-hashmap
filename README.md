@@ -178,9 +178,22 @@ example hash map uses strings as keys already, so this function is quite simple 
 
 ```c
 char *printStr(void *key) {
-    return (char *)key;
+    char *toReturn = malloc(strlen(key) + 1);
+    return strcpy(toReturn, str);
 }
 ```
+
+---
+
+**Note:** Why did we create a copy of the key instead of just returning it as a `char *` (since it's
+already a string)? The hash map API expects its keys and values to be dynamically allocated on
+the heap, and will try and free the key if it is ever removed from the hash map. If we use a
+literal string as the key, which doesn't need to be freed, then `free` will be called on stack memory.
+
+This seems annoying at first, but it's a necessary side-effect of allowing any kind of type or
+custom struct to act as a key for a hash map.
+
+---
 
 
 <a name="putting-it-all-together"></a>

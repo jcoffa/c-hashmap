@@ -498,7 +498,7 @@ char *hashmapValueToString(const HashMap *map, void *key) {
 
 void hashmapPrintValue(const HashMap *map, void *key) {
 	char *toPrint = hashmapValueToString(map, key);
-	printf("%s\n", toPrint);
+	puts(toPrint);
 	free(toPrint);
 }
 
@@ -552,7 +552,7 @@ char *hashmapToString(const HashMap *map) {
 
 void hashmapPrint(const HashMap *map) {
 	char *toPrint = hashmapToString(map);
-	printf("%s\n", toPrint);
+	puts(toPrint);
 	free(toPrint);
 }
 
@@ -611,7 +611,7 @@ char *__hashmapToStringDEBUG(const HashMap *map) {
 
 void __hashmapPrintDEBUG(const HashMap *map) {
 	char *toPrint = __hashmapToStringDEBUG(map);
-	printf("%s\n", toPrint);
+	puts(toPrint);
 	free(toPrint);
 }
 

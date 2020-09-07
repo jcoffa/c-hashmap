@@ -5,16 +5,13 @@
  * INTERNAL USE *
  ****************/
 
+// Returned by the index calculation function, _hashmapGetIndex(map, key), when key was not found in map.
+static const long ENTRY_NOT_FOUND = -1;
+
+
 // A special hash entry value indicating no data is present in a bucket
 static const HashEntry *const EMPTY_ENTRY = NULL;
 
-
-// _DUMMY_ENTRY SHOULD NEVER BE USED DIRECTLY; it is only used to set the pointer constant DUMMY_ENTRY
-static const HashEntry _DUMMY_ENTRY = {
-	0,		// hash value
-	NULL,	// pointer to key
-	NULL,	// pointer to value
-};
 
 /*
  * A special hash entry value indicating that data used to be present in this bucket,
@@ -22,7 +19,13 @@ static const HashEntry _DUMMY_ENTRY = {
  * This is necessary due to how linear probing breaks when a hole is introduced in
  * the middle of a sequence of filled buckets.
  */
-static const HashEntry *const DUMMY_ENTRY = &_DUMMY_ENTRY;
+static const HashEntry *const REMOVED_ENTRY = &(HashEntry) {
+	.hash = 0,
+	.key = NULL,
+	.value = NULL
+};
+
+
 
 
 
@@ -71,12 +74,76 @@ static long _closestPow2(long x) {
 
 
 /*
- * Returns true if the given entry is either of the special hash entry values (EMPTY_ENTRY or DUMMY_ENTRY).
+ * Returns true if the given entry is either of the special hash entry values (EMPTY_ENTRY or REMOVED_ENTRY).
  *
  * Returns false otherwise, indicating that the entry contains legitimate data.
  */
 static inline bool _entryIsOpen(HashEntry *entry) {
-	return (entry == EMPTY_ENTRY || entry == DUMMY_ENTRY);
+	return entry == EMPTY_ENTRY || entry == REMOVED_ENTRY;
+}
+
+
+/*
+ * The entries array can't be NULL and the length can't be <= 0 before calling this function.
+ *
+ * Returns the index where key either should be or is currently stored.
+ */
+static long _findSlotEntries(HashEntry **entries, long length, int64_t hashVal) {
+	long i = labs(hashVal) % length;
+	const HashEntry *cur = entries[i];
+
+	while (cur != EMPTY_ENTRY && cur->hash != hashVal) {
+		// Wrap the index around the end of the array if necessary
+		i = (i+1) % length;
+		cur = entries[i];
+	}
+
+	return i;
+}
+
+
+/*
+ * Both the hash map and the key can't be NULL before calling this function.
+ *
+ * This is an internal convenience function that allows for finding an index to store a key
+ * when the caller has access to a proper hash map struct.
+ */
+static inline long _findSlotMap(const HashMap *map, void *key) {
+	return _findSlotEntries(map->entries, map->numBuckets, map->hash(key));
+}
+
+
+/*
+ * Both the hash map and the key can't be NULL before calling this function.
+ *
+ * Returns the index where key is stored in the hash map, or ENTRY_NOT_FOUND if it isn't stored by the hash map.
+ */
+static inline long _hashmapGetIndex(const HashMap *map, void *key) {
+	long idx = _findSlotMap(map, key);
+	return _entryIsOpen((map->entries)[idx]) ? ENTRY_NOT_FOUND : idx;
+}
+
+
+/*
+ * The hash map can't be NULL before calling this function.
+ * The index can't be out of bounds of the hash map's entries array before calling this function.
+ * The index must resolve to a valid key-value pair within the hash map.
+ *
+ * Removes the key-value pair at the given index within the hash map's entries array,
+ * and frees all associated memory EXCEPT for the value.
+ *
+ * Returns the value stored in the key-value pair that was removed.
+ */
+static void *_hashmapRemoveIndex(HashMap *map, long i) {
+	HashEntry *toRemove = (map->entries)[i];
+	void *toReturn = toRemove->value;
+
+	map->deleteKey(toRemove->key);
+	free(toRemove);
+	(map->entries)[i] = (HashEntry *)REMOVED_ENTRY;
+	(map->length)--;
+
+	return toReturn;
 }
 
 
@@ -143,7 +210,7 @@ static HashEntry *_hashentryNew(int64_t hash, void *key, void *value) {
  * that a resize is necessary, or else future lookups will infinite loop.
  *
  * This special case where an insertion would compromise the integrity of hash map lookups
- * is what the second condition represents.
+ * is what the condition in the second return statement guards against.
  */
 static inline bool _hashmapNeedsResize(const HashMap *map) {
 	if (((double)(map->length) / (double)(map->numBuckets)) > LOAD_FACTOR) {
@@ -168,24 +235,16 @@ static inline bool _hashmapNeedsResize(const HashMap *map) {
 static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert, void (*deleteVal)(void*), \
 		void (*deleteKey)(void*)) {
 
-
 	char entryWasNew = 1;
-	long i = labs(toInsert->hash) % (length);
+	long i = _findSlotEntries(entries, length, toInsert->hash);
 
-	// Find an empty spot in the hash map by linear probing
-	while (!_entryIsOpen(entries[i])) {
-		if (entries[i]->hash == toInsert->hash) {
-			// The insertion key is the same as a key already in the hash map.
-			// Free the old data so that it can be replaced by the new data.
-			deleteVal(entries[i]->value);
-			deleteKey(entries[i]->key);
-			free(entries[i]);
-			entryWasNew = 0;
-			break;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (length);
+	if (!_entryIsOpen(entries[i])) {
+		// An entry with this key is already in the hash map.
+		// Free the old data so that it can be replaced by the new data.
+		deleteVal(entries[i]->value);
+		deleteKey(entries[i]->key);
+		free(entries[i]);
+		entryWasNew = 0;
 	}
 
 	entries[i] = toInsert;
@@ -212,12 +271,12 @@ static char _hashmapInsert(HashEntry **entries, long length, HashEntry *toInsert
  */
 static bool _hashmapResize(HashMap *map) {
 	// First, allocate space for the new array.
-	// Hash map grows by a factor of 4 if it's "small", or a factor of 2 if its "large".
+	// A hash map grows by a factor of 4 if it's "small", or a factor of 2 if it's "large".
 	//
-	// See the comment for the HASHMAP_IS_LARGE macro in include/HashMap.h for the significance
-	// of the "small" and "large" hash maps.
+	// See the comment for the HASHMAP_IS_LARGE macro in include/HashMap.h for the
+	// significance of "small" and "large" hash maps.
 
-	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2: 4);
+	long newNumBuckets = map->numBuckets * (HASHMAP_IS_LARGE(map) ? 2 : 4);
 	HashEntry **newEntries = _makeBuckets(newNumBuckets);
 	if (newEntries == NULL) {
 		// Memory allocation for expanded entries array failed; can't really do anything to save it
@@ -237,8 +296,8 @@ static bool _hashmapResize(HashMap *map) {
 		entriesCopied++;
 	}
 
-	// Memory has been allocated and data has been copied. It is now safe to delete the old
-	// array and update the hash map.
+	// Memory has been allocated and data has been copied.
+	// It is now safe to delete the old array and update the hash map.
 	free(map->entries);
 	map->entries = newEntries;
 	map->numBuckets = newNumBuckets;
@@ -304,8 +363,8 @@ void hashmapClear(HashMap *map) {
 	}
 
 	// This while loop's condition may seem odd, but this is an attempt to avoid useless iterations.
-	// Since hash maps are full of empty space, it's not unreasonable for there to be a pretty
-	// decent amount of empty buckets at the end of the hash map's entries array.
+	// Since hash maps are full of empty space, it's possible for there to be a not-insignificant
+	// amount of empty buckets at the end of the hash map's entries array.
 	//
 	// This while loop condition basically says "while there are entries we haven't freed yet".
 	HashEntry *entry;
@@ -317,11 +376,10 @@ void hashmapClear(HashMap *map) {
 			map->deleteValue(entry->value);
 			map->deleteKey(entry->key);
 			free(entry);
-
-			(map->entries)[i] = (HashEntry *)EMPTY_ENTRY;
 			(map->length)--;
 		}
 
+		(map->entries)[i] = (HashEntry *)EMPTY_ENTRY;
 		i++;
 	}
 }
@@ -343,13 +401,11 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
-	// Resize the hash map
-	if (_hashmapNeedsResize(map)) {
-		// _hashmapResize returns false on an error
-		if (!_hashmapResize(map)) {
-			// The resize has failed. There's no sense in trying to continue
-			return false;
-		}
+	// Resize the hash map if necessary
+	if (_hashmapNeedsResize(map) && !_hashmapResize(map)) {
+		// (_hashmapResize returns false on an error)
+		// A resize was needed, and it failed. There's no sense in trying to continue.
+		return false;
 	}
 
 	int64_t hashVal = map->hash(key);
@@ -359,6 +415,8 @@ bool hashmapInsert(HashMap *map, void *key, void *value) {
 		return false;
 	}
 
+	// _hashmapInsert returns 1 when a new item is added to the hash map
+	// and 0 when a key is overridden (which doesn't increase the length)
 	map->length += _hashmapInsert(map->entries, map->numBuckets, toInsert, map->deleteValue, map->deleteKey);
 
 	return true;
@@ -370,23 +428,11 @@ void *hashmapGet(const HashMap *map, void *key) {
 		return NULL;
 	}
 
-	void *toReturn = NULL;
-	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->numBuckets);
-	HashEntry *cur = (map->entries)[i];
-
-	while (cur != EMPTY_ENTRY) {
-		if (cur->hash == hashVal) {
-			toReturn = cur->value;
-			break;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->numBuckets);
-		cur = (map->entries)[i];
+	long idx = _hashmapGetIndex(map, key);
+	if (idx == ENTRY_NOT_FOUND) {
+		return NULL;
 	}
-
-	return toReturn;
+	return (map->entries)[idx]->value;
 }
 
 
@@ -395,27 +441,12 @@ void *hashmapRemove(HashMap *map, void *key) {
 		return NULL;
 	}
 
-	void *toReturn = NULL;
-	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->numBuckets);
-	HashEntry *cur = (map->entries)[i];
-
-	while (cur != EMPTY_ENTRY) {
-		if (cur->hash == hashVal) {
-			toReturn = cur->value;
-			map->deleteKey(cur->key);
-			free(cur);
-			(map->entries)[i] = (HashEntry *)DUMMY_ENTRY;
-			(map->length)--;
-			break;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->numBuckets);
-		cur = (map->entries)[i];
+	long idx = _hashmapGetIndex(map, key);
+	if (idx == ENTRY_NOT_FOUND) {
+		return NULL;
 	}
 
-	return toReturn;
+	return _hashmapRemoveIndex(map, idx);
 }
 
 
@@ -425,11 +456,9 @@ bool hashmapDeleteKey(HashMap *map, void *key) {
 	}
 
 	void *value = hashmapRemove(map, key);
-	if (value == NULL) {
-		return false;
+	if (value != NULL) {
+		map->deleteValue(value);
 	}
-
-	map->deleteValue(value);
 	return true;
 }
 
@@ -438,39 +467,17 @@ bool hashmapContains(const HashMap *map, void *key) {
 	if (map == NULL || key == NULL) {
 		return false;
 	}
-
-	int64_t hashVal = map->hash(key);
-	long i = labs(hashVal) % (map->numBuckets);
-	HashEntry *cur = (map->entries)[i];
-
-	while (cur != EMPTY_ENTRY) {
-		if (cur != DUMMY_ENTRY && cur->hash == hashVal) {
-			return true;
-		}
-
-		// Wrap the index around the end of the array if necessary
-		i = (i+1) % (map->numBuckets);
-		cur = (map->entries)[i];
-	}
-
-	return false;
+	return _hashmapGetIndex(map, key) != ENTRY_NOT_FOUND;
 }
 
 
 long hashmapLength(const HashMap *map) {
-	if (map == NULL) {
-		return -1;
-	}
-	return map->length;
+	return map == NULL ? -1 : map->length;
 }
 
 
 bool hashmapIsEmpty(const HashMap *map) {
-	if (map == NULL) {
-		return false;
-	}
-
-	return map->length == 0;
+	return map == NULL ? false : map->length == 0;
 }
 
 
@@ -502,7 +509,7 @@ char *hashmapToString(const HashMap *map) {
 	char *keyStr;
 	char *valueStr;
 
-	if (map == NULL || map->length == 0) {
+	if (map == NULL || hashmapIsEmpty(map)) {
 		toReturn = malloc(length+2);	// +2 for closing '}' and null terminator
 		return strcpy(toReturn, "{}");
 	}
@@ -520,7 +527,9 @@ char *hashmapToString(const HashMap *map) {
 		keyStr = map->printKey(entry->key);
 		valueStr = map->printValue(entry->value);
 
-		// +4 for a ": " to separate key and value and ", " to separate entries
+		// +2 for ": " to delimit key-value pairs (key: value)
+		// +2 for ", " to delimit entries (key: value, key: value, key: value, ...)
+		// = +4
 		length += strlen(keyStr) + strlen(valueStr) + 4;
 
 		toReturn = realloc(toReturn, length+1);	// +1 for null terminator
@@ -570,10 +579,10 @@ char *__hashmapToStringDEBUG(const HashMap *map) {
 			strcat(toReturn, "<EMPTY>, ");
 			length += 9;
 			continue;
-		} else if (entry == DUMMY_ENTRY) {
-			toReturn = realloc(toReturn, length+10);
-			strcat(toReturn, "<DUMMY>, ");
-			length += 9;
+		} else if (entry == REMOVED_ENTRY) {
+			toReturn = realloc(toReturn, length+12);
+			strcat(toReturn, "<REMOVED>, ");
+			length += 11;
 			continue;
 		}
 

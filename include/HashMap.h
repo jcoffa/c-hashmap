@@ -257,7 +257,7 @@ void hashmapPrintValue(const HashMap *map, void *key);
 
 
 /*
- * Returns a string representing the entire hash map using it's `printKey` and `printVal`
+ * Returns a string representing the entire hash map using its `printKey` and `printVal`
  * function pointers to create the string.
  *
  * The string must be freed by the calling function after use.
